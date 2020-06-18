@@ -1,3 +1,6 @@
+import sys
+
+
 class Node:
     def __init__(self, val, left=None, right=None, parent=None):
         self.value = val
@@ -18,14 +21,15 @@ class SplayTree:
         if self.root is None:
             self.root = Node(val)
             return
+
         current = self.root
         while True:
             if current.value == val:
                 break
+            # current.sum_below += val
             if val < current.value:
                 if current.left is None:
                     current.left = Node(val)
-                    current.sum_below += val
                     current.left.parent = current
                     self._splay(current.left)
                     break
@@ -34,7 +38,6 @@ class SplayTree:
                 if current.right is None:
                     current.right = Node(val)
                     current.right.parent = current
-                    current.sum_below += val
                     self._splay(current.right)
                     break
                 current = current.right
@@ -50,12 +53,12 @@ class SplayTree:
                 return True
             elif val < current.value:
                 if current.left is None:
-                    self._splay(current)
+                    # self._splay(current)
                     return False
                 current = current.left
             elif val > current.value:
                 if current.right is None:
-                    self._splay(current)
+                    # self._splay(current)
                     return False
                 current = current.right
 
@@ -63,8 +66,24 @@ class SplayTree:
         if self.find(val):  # Now val is the root
             self.root = self._merge(self.root.left, self.root.right)
 
-    def sum_range(self, min_val, max_val):
-        pass
+    def sum_range(self, min_val=float("-inf"), max_val=float("inf")):
+        answer = 0
+        current = self.root
+        previous_value = float("-inf")
+        stack = []
+        while True:
+            while current is not None:
+                stack.append(current)
+                current = current.left
+
+            if current is None and stack:
+                current = stack.pop()
+                if min_val <= current.value <= max_val:
+                    answer += current.value
+                current = current.right
+
+            if current is None and not stack:
+                return answer
 
     def _splay(self, node):
         while node.parent is not None:
@@ -83,13 +102,7 @@ class SplayTree:
 
     def _set_root(self, node):
         self.root = node
-        node.parent = None
-
-    def test_some_shit(self):
-        print(f"Here is root node before shit: {self.root}")
-        c = self.root
-        c.value = 666
-        print(f"Here is changed copy of root: {c}, here is original root: {self.root}")
+        self.root.parent = None
 
     @staticmethod
     def _merge(left, right):
@@ -98,9 +111,13 @@ class SplayTree:
         :param right: Node
         :return: root node of merged tree
         """
+        if left is None and right is None:
+            return None
         if left is None:
+            right.parent = None
             return right
         if right is None:
+            left.parent = None
             return left
         tree = SplayTree()
         SplayTree._set_root(tree, left)
@@ -110,6 +127,7 @@ class SplayTree:
         tree._splay(current)
         tree.root.right = right
         tree.root.right.parent = tree.root
+        # tree.root.sum_below += right.sum_below
         return tree.root
 
     @staticmethod
@@ -127,16 +145,48 @@ class SplayTree:
                 gparent.left = child
             else:
                 gparent.right = child
+
+        # parent.sum_below -= child.sum_below
         if parent.left == child:
             parent.left = child.right
+            # if child.right is not None:
+                # parent.sum_below += child.right.sum_below
+                # child.sum_below -= child.right.sum_below
             child.right = parent
         else:
             parent.right = child.left
+            # if child.left is not None:
+                # parent.sum_below += child.left.sum_below
+                # child.sum_below -= child.left.sum_below
             child.left = parent
+        # child.sum_below += parent.sum_below
+
         # Making nodes their kids' parents
         SplayTree._make_parent(child)
         SplayTree._make_parent(parent)
         child.parent = gparent
+
+
+def pass_stepik_tests():
+    reader = (x.split() for x in sys.stdin)
+    n = int(next(reader)[0])
+    t = SplayTree()
+    s = 0
+    for _ in range(n):
+        query, *rest = next(reader)
+        if len(rest) == 1:
+            a = (s + int(rest[0])) % 1_000_000_001
+        else:
+            a = [(s + int(x)) % 1_000_000_001 for x in rest]
+        if query == "?":
+            print(["Not found", "Found"][t.find(a)])
+        elif query == "+":
+            t.insert(a)
+        elif query == "-":
+            t.remove(a)
+        else:  #  query == "s"
+            s = t.sum_range(*a)
+            print(s)
 
 
 def random_insert_find_test(n_elements=10000, rand_seed=1):
@@ -144,26 +194,71 @@ def random_insert_find_test(n_elements=10000, rand_seed=1):
 
     t = SplayTree()
     random.seed(rand_seed)
-    elements = set([random.randint(0, 10**9) for _ in range(n_elements)])
+    elements = set([random.randint(0, 10**3) for _ in range(n_elements)])
+    total_sum = sum(elements)
     for i, el in enumerate(elements):
         t.insert(el)
         try:
             assert t.root.value == el
-        except AssertionError:
-            print(i, el, t.root.value)
+        except AssertionError as e:
+            raise Exception(f"Element: {el}, root value: {t.root.value}").\
+                with_traceback(e.__traceback__)
 
     for el in elements:
         t.find(el)
         try:
             assert t.root.value == el
-        except AssertionError:
-            print(el, t.root.value)
-
+        except AssertionError as e:
+            raise Exception(f"Element: {el}, root value: {t.root.value}").\
+                with_traceback(e.__traceback__)
     print("All good with random insert-find test!")
 
 
-if __name__ == "__main__":
-    for i in range(20):
-        random_insert_find_test(rand_seed=i)
+def random_test_sum_below(n_elements=100, rand_seed=1):
+    import random
 
-    
+    t = SplayTree()
+    elements = [random.randint(0, 10**3) for _ in range(n_elements)]
+    added_elements = []
+    current_sum = 0
+    for el in elements:
+        if el not in added_elements:
+            current_sum += el
+            added_elements.append(el)
+        t.insert(el)
+        try:
+            assert t.root.sum_below == current_sum
+        except AssertionError as e:
+            raise Exception(f"Root sum: {t.root.sum_below}, current sum: {current_sum}").\
+                with_traceback(e.__traceback__)
+    print("If there were no messages above it's all good!")
+
+
+def random_sum_range(n_elements=10000, n_tests=100, rand_seed=1):
+    import random
+
+    t = SplayTree()
+    elements = [random.randint(0, 10**9) for _ in range(n_elements)]
+    for el in elements:
+        t.insert(el)
+    for _ in range(n_tests):
+        l, r = sorted([random.choice(elements), random.choice(elements)])
+        actual_sum = sum([x for x in elements if l <= x <= r])
+        tree_sum = t.sum_range(l, r)
+        try:
+            assert tree_sum == actual_sum
+        except AssertionError as e:
+            raise Exception(f"Actual_sum: {actual_sum}, tree_sum: {tree_sum}").\
+                with_traceback(e.__traceback__)
+
+    print("All good with random sum range!")
+
+
+
+
+if __name__ == "__main__":
+    # random_insert_find_test()
+    # random_sum_range()
+    pass_stepik_tests()
+
+
